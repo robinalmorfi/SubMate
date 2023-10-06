@@ -1,35 +1,40 @@
 package com.example.submate
 
-import android.annotation.SuppressLint
+import android.content.Context
 import android.content.Intent
+import android.content.SharedPreferences
+import android.net.Uri
 import android.os.Bundle
 import android.provider.MediaStore
+import android.text.Editable
 import android.util.Log
 import android.widget.Button
 import android.widget.EditText
 import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
-import de.hdodenhof.circleimageview.CircleImageView
-import android.text.Editable
-import android.net.Uri
-import android.Manifest
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
-import android.content.pm.PackageManager
+import com.google.firebase.firestore.FirebaseFirestore
+import de.hdodenhof.circleimageview.CircleImageView
+import java.util.HashMap
 
 class UserProfile : AppCompatActivity() {
 
     private val PICK_IMAGE_REQUEST = 1
     private lateinit var userProfile2: CircleImageView
     private val defaultImageResId = R.mipmap.man_foreground // Default image resource ID
+    private val db = FirebaseFirestore.getInstance()
+    private var selectedImageUri: Uri? = null
+    private lateinit var textView2: TextView
+    private lateinit var sharedPreferences: SharedPreferences
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_user_profile)
 
         // Find the TextView with ID textView2
-        val textView2 = findViewById<TextView>(R.id.textView2)
+        textView2 = findViewById(R.id.textView2)
 
         // Retrieve the entered name from the extras
         val enteredName = intent.getStringExtra("name")
@@ -45,13 +50,31 @@ class UserProfile : AppCompatActivity() {
 
         // Check if a valid image URI was passed
         if (selectedImageUriString != null) {
-            val selectedImageUri = Uri.parse(selectedImageUriString)
+            selectedImageUri = Uri.parse(selectedImageUriString)
 
             // Set the selected image URI as the image source for userProfile2
             userProfile2.setImageURI(selectedImageUri)
         } else {
             // If no image URI is provided, set the default image
             userProfile2.setImageResource(defaultImageResId)
+        }
+
+        // Initialize SharedPreferences
+        sharedPreferences = getSharedPreferences("UserProfilePrefs", Context.MODE_PRIVATE)
+
+        // Check if there is previously saved text and image URI in SharedPreferences
+        val savedUsername = sharedPreferences.getString("username", null)
+        val savedImageUriString = sharedPreferences.getString("imageUri", null)
+
+        // If there is saved text, set it to textView2
+        savedUsername?.let {
+            textView2.text = it
+        }
+
+        // If there is a saved image URI, set it to userProfile2
+        savedImageUriString?.let {
+            selectedImageUri = Uri.parse(it)
+            userProfile2.setImageURI(selectedImageUri)
         }
 
         showEditTextDialog()
@@ -61,6 +84,27 @@ class UserProfile : AppCompatActivity() {
         val textView7 = findViewById<TextView>(R.id.textView7)
         textView7.setOnClickListener {
             checkGalleryPermission()
+        }
+    }
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+
+        if (requestCode == PICK_IMAGE_REQUEST && resultCode == RESULT_OK) {
+            val selectedImage = data?.data
+
+            if (selectedImage != null) {
+                // Save the selected image to a URI
+                selectedImageUri = selectedImage
+
+                // Display the selected image in the userProfile2 ImageView
+                userProfile2.setImageURI(selectedImageUri)
+
+                // Save the selected image URI to SharedPreferences
+                val editor = sharedPreferences.edit()
+                editor.putString("imageUri", selectedImageUri.toString())
+                editor.apply()
+            }
         }
     }
 
@@ -76,7 +120,6 @@ class UserProfile : AppCompatActivity() {
             // Find textView2 from the current activity layout (activity_user_profile.xml)
             val textView2 = findViewById<TextView>(R.id.textView2)
 
-
             // Set the initial text of dialogEditText to match textView2
             dialogEditText.text = Editable.Factory.getInstance().newEditable(textView2.text.toString())
 
@@ -85,6 +128,11 @@ class UserProfile : AppCompatActivity() {
                 setPositiveButton("OK") { dialog, which ->
                     val editedText = dialogEditText.text.toString()
                     textView2.text = editedText // Set the text to textView2
+
+                    // Save the edited text to SharedPreferences
+                    val editor = sharedPreferences.edit()
+                    editor.putString("username", editedText)
+                    editor.apply()
                 }
                 setNegativeButton("Cancel") { dialog, which ->
                     Log.d("Main", "Negative button clicked")
@@ -100,14 +148,24 @@ class UserProfile : AppCompatActivity() {
 
         saveButton.setOnClickListener {
             // Get the edited text from textView2
-            val textView2 = findViewById<TextView>(R.id.textView2)
             val editedText = textView2.text.toString()
 
-            // Create an Intent to navigate back to MainActivity
+            // Get the current image URI from selectedImageUri
+            val currentImageUri = selectedImageUri
+
+            // Save the edited text and image URI to Firebase or any other storage mechanism
+            saveUserDataToFirestore(editedText, currentImageUri)
+
+            // Assuming you want to navigate back to MainActivity after saving
             val intent = Intent(this, MainActivity::class.java)
 
             // Pass the edited text as an extra to MainActivity
             intent.putExtra("editedText", editedText)
+
+            // Pass the selected image URI as an extra to MainActivity
+            if (currentImageUri != null) {
+                intent.putExtra("profile_image_uri", currentImageUri.toString())
+            }
 
             // Start the MainActivity
             startActivity(intent)
@@ -118,12 +176,12 @@ class UserProfile : AppCompatActivity() {
     }
 
     private fun checkGalleryPermission() {
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE)
-            != PackageManager.PERMISSION_GRANTED) {
+        if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.READ_EXTERNAL_STORAGE)
+            != android.content.pm.PackageManager.PERMISSION_GRANTED) {
             // Permission is not granted, request it
             ActivityCompat.requestPermissions(
                 this,
-                arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE),
+                arrayOf(android.Manifest.permission.READ_EXTERNAL_STORAGE),
                 PICK_IMAGE_REQUEST
             )
         } else {
@@ -137,12 +195,34 @@ class UserProfile : AppCompatActivity() {
         startActivityForResult(galleryIntent, PICK_IMAGE_REQUEST)
     }
 
-    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-        super.onActivityResult(requestCode, resultCode, data)
+    private fun saveUserDataToFirestore(username: String, imageUri: Uri?) {
+        // Create a reference to the Firestore collection where you want to store user data
+        val usersCollection = db.collection("users")
 
-        if (requestCode == PICK_IMAGE_REQUEST && resultCode == RESULT_OK && data != null) {
-            val selectedImageUri = data.data
-            userProfile2.setImageURI(selectedImageUri)
+        // Create a data map to store the username and image URI
+        val userData = HashMap<String, Any>()
+        userData["username"] = username
+        if (imageUri != null) {
+            userData["profileImageUri"] = imageUri.toString()
         }
+
+        // You need to associate this data with the user (e.g., using their UID) in Firestore
+        // Replace "user123" with the actual user ID
+        val userId = "user"
+
+        // Set the user data in Firestore
+        usersCollection.document(userId)
+            .set(userData)
+            .addOnSuccessListener {
+                // Data was successfully saved to Firestore
+            }
+            .addOnFailureListener { e ->
+                // Handle errors here
+                Log.e(TAG, "Error saving data to Firestore", e)
+            }
+    }
+
+    companion object {
+        private const val TAG = "UserProfile"
     }
 }

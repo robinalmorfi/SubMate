@@ -13,6 +13,8 @@ import android.widget.EditText
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import com.google.firebase.database.DatabaseReference
+import com.google.firebase.database.FirebaseDatabase
 import de.hdodenhof.circleimageview.CircleImageView
 import java.io.File
 import java.io.FileOutputStream
@@ -20,11 +22,17 @@ import java.io.IOException
 import java.text.SimpleDateFormat
 import java.util.*
 
-@Suppress("DEPRECATION")
+
+
 class UserSetup : AppCompatActivity() {
+
+    data class User(val username: String, val profileImageUri: String)
+
     private lateinit var userImage: CircleImageView
     private var selectedImageUri: Uri? = null
     private val defaultImageResId = R.mipmap.man_foreground // Default image resource ID
+    private lateinit var database: FirebaseDatabase
+    private lateinit var usersRef: DatabaseReference
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -37,7 +45,10 @@ class UserSetup : AppCompatActivity() {
         // Set the default image to the CircleImageView
         userImage.setImageResource(defaultImageResId)
 
-        // Set an OnClickListener for the profile image
+        // Initialize Firebase Database
+        database = FirebaseDatabase.getInstance()
+        usersRef = database.reference.child("users")
+
         userImage.setOnClickListener {
             checkGalleryPermission()
         }
@@ -46,28 +57,23 @@ class UserSetup : AppCompatActivity() {
         val nameEditText = findViewById<EditText>(R.id.userName)
 
         confirmButton.setOnClickListener {
-            // Get the name entered in the EditText
             val enteredName = nameEditText.text.toString()
-
-            // Generate a random username if no text is entered
             val username = if (enteredName.isNotEmpty()) {
                 enteredName
             } else {
                 generateRandomUsername()
             }
 
-            // Create an Intent to start the MainActivity
-            val intent = Intent(this, MainActivity::class.java)
+            val user = User(username, selectedImageUri?.toString() ?: "")
 
-            // Add the username as an extra to the Intent
-            intent.putExtra("name", username)
-
-            // Add the selected image URI as an extra to the Intent
-            if (selectedImageUri != null) {
-                intent.putExtra("profile_image_uri", selectedImageUri.toString())
+            val userId = usersRef.push().key // Generate a unique key for the user
+            userId?.let {
+                usersRef.child(it).setValue(user)
             }
 
-            // Start the MainActivity
+            val intent = Intent(this, MainActivity::class.java)
+            intent.putExtra("name", username)
+            intent.putExtra("profile_image_uri", selectedImageUri?.toString())
             startActivity(intent)
         }
     }
@@ -113,10 +119,8 @@ class UserSetup : AppCompatActivity() {
                     inputStream?.close()
                     outputStream.close()
 
-                    // Display the selected image in the userImage ImageView
                     userImage.setImageURI(selectedImageUri)
 
-                    // Add a log statement to check the selectedImageUri
                     Log.d("UserSetup", "Selected image URI: $selectedImageUri")
                 } catch (e: IOException) {
                     e.printStackTrace()
@@ -134,9 +138,8 @@ class UserSetup : AppCompatActivity() {
     }
 
     private fun generateRandomUsername(): String {
-        // Generate a random username, e.g., "User123"
         val random = Random()
-        val randomNumber = random.nextInt(1000) // Generate a random number between 0 and 999
+        val randomNumber = random.nextInt(1000)
         return "User$randomNumber"
     }
 

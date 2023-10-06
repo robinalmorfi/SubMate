@@ -28,5 +28,6 @@
     <string name="change">Change</string>
     <string name="username">Username</string>
     <string name="enter_new_username">Enter your new username</string>
+    <string name="edit">edit</string>
     <!-- Strings used for fragments for navigation -->
 </resources>

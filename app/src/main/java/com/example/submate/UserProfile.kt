@@ -76,6 +76,7 @@ class UserProfile : AppCompatActivity() {
             // Find textView2 from the current activity layout (activity_user_profile.xml)
             val textView2 = findViewById<TextView>(R.id.textView2)
 
+
             // Set the initial text of dialogEditText to match textView2
             dialogEditText.text = Editable.Factory.getInstance().newEditable(textView2.text.toString())
 
